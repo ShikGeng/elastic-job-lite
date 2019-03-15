@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.checkerframework.checker.nullness.compatqual.NullableDecl;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -46,24 +47,24 @@ import java.util.concurrent.CopyOnWriteArraySet;
  */
 @RequiredArgsConstructor
 public final class RunningService {
-    
+
     private static final int TASK_INITIAL_SIZE = 1024;
-    
+
     // TODO 使用JMX导出
     @Getter
     private static final ConcurrentHashMap<String, Set<TaskContext>> RUNNING_TASKS = new ConcurrentHashMap<>(TASK_INITIAL_SIZE);
-    
+
     private static final ConcurrentHashMap<String, String> TASK_HOSTNAME_MAPPER = new ConcurrentHashMap<>(TASK_INITIAL_SIZE);
-    
+
     private final CoordinatorRegistryCenter regCenter;
-    
+
     private final CloudJobConfigurationService configurationService;
-    
+
     public RunningService(final CoordinatorRegistryCenter regCenter) {
         this.regCenter = regCenter;
         this.configurationService = new CloudJobConfigurationService(regCenter);
     }
-    
+
     /**
      * 启动任务运行队列.
      */
@@ -76,7 +77,7 @@ public final class RunningService {
                 continue;
             }
             RUNNING_TASKS.put(each, Sets.newCopyOnWriteArraySet(Lists.transform(regCenter.getChildrenKeys(RunningNode.getRunningJobNodePath(each)), new Function<String, TaskContext>() {
-                
+
                 @Override
                 public TaskContext apply(final String input) {
                     return TaskContext.from(regCenter.get(RunningNode.getRunningTaskNodePath(TaskContext.MetaInfo.from(input).toString())));
@@ -84,10 +85,10 @@ public final class RunningService {
             })));
         }
     }
-    
+
     /**
      * 将任务运行时上下文放入运行时队列.
-     * 
+     *
      * @param taskContext 任务运行时上下文
      */
     public void add(final TaskContext taskContext) {
@@ -103,12 +104,12 @@ public final class RunningService {
             regCenter.persist(runningTaskNodePath, taskContext.getId());
         }
     }
-    
+
     private boolean isDaemon(final String jobName) {
         Optional<CloudJobConfiguration> cloudJobConfigurationOptional = configurationService.load(jobName);
         return cloudJobConfigurationOptional.isPresent() && CloudJobExecutionType.DAEMON == cloudJobConfigurationOptional.get().getJobExecutionType();
     }
-    
+
     /**
      * 更新作业闲置状态.
      * @param taskContext 任务运行时上下文
@@ -124,16 +125,20 @@ public final class RunningService {
             }
         }
     }
-    
+
     private Optional<TaskContext> findTask(final TaskContext taskContext) {
         return Iterators.tryFind(getRunningTasks(taskContext.getMetaInfo().getJobName()).iterator(), new Predicate<TaskContext>() {
             @Override
             public boolean apply(final TaskContext input) {
                 return input.equals(taskContext);
             }
+            @Override
+            public boolean test(@NullableDecl TaskContext input) {
+                return apply(input);
+            }
         });
     }
-    
+
     /**
      * 将作业从运行时队列删除.
      *
@@ -146,10 +151,10 @@ public final class RunningService {
         }
         regCenter.remove(RunningNode.getRunningJobNodePath(jobName));
     }
-        
+
     /**
      * 将任务从运行时队列删除.
-     * 
+     *
      * @param taskContext 任务运行时上下文
      */
     public void remove(final TaskContext taskContext) {
@@ -163,12 +168,12 @@ public final class RunningService {
             regCenter.remove(jobRootNode);
         }
     }
-    
+
     private boolean isDaemonOrAbsent(final String jobName) {
         Optional<CloudJobConfiguration> cloudJobConfigurationOptional = configurationService.load(jobName);
         return !cloudJobConfigurationOptional.isPresent() || CloudJobExecutionType.DAEMON == cloudJobConfigurationOptional.get().getJobExecutionType();
     }
-    
+
     /**
      * 判断作业是否运行.
      *
@@ -178,7 +183,7 @@ public final class RunningService {
     public boolean isJobRunning(final String jobName) {
         return !getRunningTasks(jobName).isEmpty();
     }
-    
+
     /**
      * 判断任务是否运行.
      *
@@ -193,7 +198,7 @@ public final class RunningService {
         }
         return false;
     }
-    
+
     /**
      * 获取运行中的任务集合.
      *
@@ -205,7 +210,7 @@ public final class RunningService {
         Collection<TaskContext> result = RUNNING_TASKS.putIfAbsent(jobName, taskContexts);
         return null == result ? taskContexts : result;
     }
-    
+
     /**
      * 获取运行中的全部任务.
      *
@@ -216,10 +221,10 @@ public final class RunningService {
         result.putAll(RUNNING_TASKS);
         return result;
     }
-    
+
     /**
      * 获取所有的运行中的常驻作业.
-     * 
+     *
      * @return 运行中常驻作业集合
      */
     public Set<TaskContext> getAllRunningDaemonTasks() {
@@ -237,7 +242,7 @@ public final class RunningService {
         }
         return result;
     }
-    
+
     /**
      * 添加任务主键和主机名称的映射.
      *
@@ -247,7 +252,7 @@ public final class RunningService {
     public void addMapping(final String taskId, final String hostname) {
         TASK_HOSTNAME_MAPPER.putIfAbsent(taskId, hostname);
     }
-    
+
     /**
      * 根据任务主键获取主机名称并清除该任务.
      *
@@ -257,7 +262,7 @@ public final class RunningService {
     public String popMapping(final String taskId) {
         return TASK_HOSTNAME_MAPPER.remove(taskId);
     }
-    
+
     /**
      * 清理所有运行时状态.
      */
